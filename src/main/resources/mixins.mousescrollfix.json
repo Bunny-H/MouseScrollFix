@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.bunnyh.mousescrollfix.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "mixins.mousescrollfix.refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "GlxWaylandCompatMixin",
+    "MouseHandlerInvoker",
+    "MouseHandlerMixin",
+    "WindowWaylandCompatMixin"
+  ]
+}
