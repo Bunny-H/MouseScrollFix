@@ -3,7 +3,7 @@
 让鼠标滚轮「转一格 = 切一格」，不再受 KDE 的「滚动速度」设置影响。
 换成原生 Wayland 后带来的鼠标指针问题（箭头变成系统默认样式）也由 mod 一并修好。
 
-- 产物：`build/libs/mousescrollfix-1.1.0.jar`
+- 产物：`build/libs/mousescrollfix-1.2.0.jar`
 - 纯客户端 mod，不会影响联机（`clientSideOnly=true`）
 - 已在干净环境（无其他 mod 的开发客户端）实测通过，未装进任何整合包
 
@@ -171,12 +171,14 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 | `dedupe_window_ms` | `0` | 同一格滚轮被报成两个事件的抑制窗口。实测 GLFW 一格只发一个事件，所以保持 0 |
 | `debug_log` | `false` | 把每个滚轮事件写进 `logs/mousescrollfix-debug.log` |
 | `self_test_on_join` | `false` | 进世界后自动跑一次自检 |
+| `backend_hint` | `true` | **v1.2.0 新增**：如果游戏没跑在原生 Wayland 下（X11 / XWayland），进主菜单时弹一条提示告诉你这里效果不好。只在**确实检测到** X11/XWayland 时才弹（Windows/macOS 检测不到后端，永远不弹） |
 | `fix_cursor_theme` | `true` | 自动把鼠标指针换成桌面的游标主题（仅原生 Wayland 生效）。设 `false` 恢复 GLFW 的默认箭头（会变成 Adwaita 那套通用箭头）；配置改动若 10 秒内没生效，说明 Forge 没自动重载配置，重启游戏即可 |
 | `cursor_theme` | 空 | 留空＝自动读桌面设置。只有当 mod 认不出你的桌面环境时，才需要手填主题名（`/usr/share/icons` 下的目录名） |
 | `cursor_size` | `0` | 游标尺寸（逻辑像素），`0`＝用桌面配置的尺寸（读不到时 24） |
 
-游戏内命令：`/mousescrollfix test`（跑自检）、`/mousescrollfix status`（看当前状态）、
-`/mousescrollfix cursor`（重新应用并打印指针用的是哪个主题、哪个文件）。
+游戏内命令：`/mousescrollfix test`（跑自检）、`/mousescrollfix status`（看当前状态，含后端是
+Wayland 还是 XWayland）、`/mousescrollfix cursor`（重新应用并打印指针用的是哪个主题、哪个文件）、
+`/mousescrollfix hint`（手动弹一次那条环境提示，原生 Wayland 下想看效果时用）。
 
 ---
 
@@ -189,6 +191,8 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 | `WindowWaylandCompatMixin` | 同上，处理启动后的另一条：`0x1000C`（"Wayland 不支持设置窗口图标"）会让原版弹「请更新显卡驱动」对话框卡死。两个 Mixin 都只放过 `0x1000C` 这一个错误码并记日志，其他 GLFW 错误照常按原版处理 |
 | `CursorThemeFix` | **v1.1.0 新增**：Wayland 下窗口上的指针由 GLFW 决定，而 GLFW 只认 `XCURSOR_THEME` 环境变量（桌面环境不导出它），于是显示通用箭头。这个类自己去读桌面配置（KDE `kcminputrc`／GTK `settings.ini`／环境变量），在开界面时把主题里的箭头交给 GLFW。GLFW 在抓取/释放鼠标时会忘记窗口游标，所以每 10 秒和每次开界面都会重新应用一次 |
 | `XCursorFile` | **v1.1.0 新增**：解析 Xcursor 文件格式（主题里 `.cursor`/`cursors/*` 的格式），挑出与请求尺寸最接近的那一档箭头，把预乘 ARGB 转成 GLFW 要的直通 RGBA |
+| `EnvInfo` | **v1.2.0 新增**：判断游戏实际用的是原生 Wayland 还是 X11/XWayland（读 `/proc/self/maps`，看进程里绑的是 `libwayland-client` 还是 `/libX11.so`），两种都没读到就返回"未知"、什么都不做 |
+| `BackendHint` | **v1.2.0 新增**：判定为 X11/XWayland 时，在主菜单弹一次提示（每次启动最多一次）。Windows/macOS 上后端检测不到，按构造不会误报。文案走 lang 文件，`en_us` 与 `zh_cn` 各一份 |
 
 ---
 
@@ -223,7 +227,8 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
    `/mousescrollfix cursor` 可以随时查看它当前用的是哪个主题、哪个文件。
 
 4. **在 X11 上这个 mod 对滚轮不起作用**（因为那条路上没有小数，无事可做）。
-   它只会让 Wayland 能启动那两条生效。
+   它只会让 Wayland 能启动那两条生效。v1.2.0 起，这种情况会在主菜单弹一条
+   「X11 / XWayland 下效果不好」的提示（`backend_hint = false` 可关掉）。
 5. 如果原生 Wayland 在你的整合包里问题太多，**最省事的替代方案**是把 Rapoo 鼠标的
    KDE 滚动速度改回默认（1.0）—— 实测那样 X11 下就是 12 格 = 12 事件 = 12 格，
    和 Windows 完全一致，不需要任何 mod。代价是这个鼠标在桌面所有程序里都会滚得快一些。
@@ -248,7 +253,7 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 
 ## 八、卸载
 
-删掉 `mods/mousescrollfix-1.1.0.jar`，并去掉那条 `-Dorg.lwjgl.glfw.libname`
+删掉 `mods/mousescrollfix-1.2.0.jar`，并去掉那条 `-Dorg.lwjgl.glfw.libname`
 JVM 参数（去掉后就回到 X11，一切恢复原样，系统设置从未被修改过）。
 
 ## 九、给开发者

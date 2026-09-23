@@ -16,6 +16,7 @@ public final class ScrollFixConfig {
     private static final ForgeConfigSpec.IntValue DEDUPE_WINDOW_MS;
     private static final ForgeConfigSpec.BooleanValue DEBUG_LOG;
     private static final ForgeConfigSpec.BooleanValue SELF_TEST_ON_JOIN;
+    private static final ForgeConfigSpec.BooleanValue BACKEND_HINT;
     private static final ForgeConfigSpec.BooleanValue FIX_CURSOR_THEME;
     private static final ForgeConfigSpec.ConfigValue<String> CURSOR_THEME;
     private static final ForgeConfigSpec.IntValue CURSOR_SIZE;
@@ -26,6 +27,7 @@ public final class ScrollFixConfig {
     public static volatile int dedupeWindowMs = 0;
     public static volatile boolean debugLog = false;
     public static volatile boolean selfTestOnJoin = false;
+    public static volatile boolean backendHint = true;
     public static volatile boolean fixCursorTheme = true;
     public static volatile String cursorTheme = "";
     public static volatile int cursorSize = 0;
@@ -64,6 +66,13 @@ public final class ScrollFixConfig {
                         "Run the automated per-notch self test once, a few seconds after joining a world.",
                         "Results go to the log file and to chat. For diagnosing; leave off for normal play.")
                 .define("self_test_on_join", false);
+
+        BACKEND_HINT = b.comment(
+                        "If the game is NOT running on native Wayland (i.e. under X11 or XWayland), show a",
+                        "short notice on the main menu saying the fix does not work well there.",
+                        "Only a positively detected Linux X11/XWayland backend triggers it; on Windows and",
+                        "macOS the backend cannot be detected, so nothing is ever shown there.")
+                .define("backend_hint", true);
 
         b.comment(
                 "",
@@ -109,6 +118,7 @@ public final class ScrollFixConfig {
             dedupeWindowMs = DEDUPE_WINDOW_MS.get();
             debugLog = DEBUG_LOG.get();
             selfTestOnJoin = SELF_TEST_ON_JOIN.get();
+            backendHint = BACKEND_HINT.get();
             fixCursorTheme = FIX_CURSOR_THEME.get();
             cursorTheme = CURSOR_THEME.get();
             cursorSize = CURSOR_SIZE.get();

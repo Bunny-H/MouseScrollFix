@@ -16,6 +16,20 @@ import java.util.List;
  */
 public final class EnvInfo {
 
+    /** Which client library GLFW actually bound in this process. */
+    public enum Backend {
+        /** Native Wayland: the compositor scales a notch to a fraction, the only case this mod acts on. */
+        WAYLAND,
+        /** X11 or XWayland: every notch arrives as +-1.0, so there is nothing to normalize. */
+        X11,
+        /** Not determined (non-Linux, unreadable /proc, ...). Never guessed at; callers stay silent. */
+        UNKNOWN
+    }
+
+    /** One read of /proc/self/maps, plus why it failed if it did. */
+    private record Loaded(boolean wayland, boolean x11, String error) {
+    }
+
     private EnvInfo() {
     }
 
@@ -27,8 +41,40 @@ public final class EnvInfo {
         }
     }
 
+    public static Backend backend() {
+        Loaded loaded = load();
+        if (loaded.wayland()) {
+            return Backend.WAYLAND;
+        }
+        if (loaded.x11()) {
+            return Backend.X11;
+        }
+        return Backend.UNKNOWN;
+    }
+
     /** Wayland vs X11, decided by which client library GLFW actually bound in this process. */
     public static String windowBackend() {
+        Loaded loaded = load();
+        if (loaded.error() != null) {
+            return "unknown (" + loaded.error() + ")";
+        }
+        if (loaded.wayland() && loaded.x11()) {
+            return "wayland (libX11 also present)";
+        }
+        if (loaded.wayland()) {
+            return "wayland";
+        }
+        if (loaded.x11()) {
+            return "x11 / xwayland";
+        }
+        return "unknown";
+    }
+
+    /**
+     * A loaded Wayland client library wins when both are mapped: /libX11.so can be pulled in by
+     * anything, while GLFW only binds libwayland-client after it really opened a Wayland display.
+     */
+    private static Loaded load() {
         boolean wayland = false;
         boolean x11 = false;
         try {
@@ -41,17 +87,8 @@ public final class EnvInfo {
                 }
             }
         } catch (Exception e) {
-            return "unknown (" + e.getClass().getSimpleName() + ")";
+            return new Loaded(false, false, e.getClass().getSimpleName());
         }
-        if (wayland && x11) {
-            return "wayland (libX11 also present)";
-        }
-        if (wayland) {
-            return "wayland";
-        }
-        if (x11) {
-            return "x11 / xwayland";
-        }
-        return "unknown";
+        return new Loaded(wayland, x11, null);
     }
 }

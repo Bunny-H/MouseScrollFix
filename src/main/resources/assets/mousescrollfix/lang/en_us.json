@@ -1,0 +1,4 @@
+{
+  "mousescrollfix.backend_hint.title": "Mouse Scroll Fix",
+  "mousescrollfix.backend_hint.message": "Doesn't work well on X11 / XWayland."
+}

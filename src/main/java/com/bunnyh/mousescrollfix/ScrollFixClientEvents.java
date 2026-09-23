@@ -46,16 +46,24 @@ public final class ScrollFixClientEvents {
                             status();
                             return 1;
                         }))
+                        .then(Commands.literal("hint").executes(ctx -> {
+                            BackendHint.show();
+                            say("[mousescrollfix] backend: " + EnvInfo.windowBackend()
+                                    + " (the main-menu notice is shown automatically under X11/XWayland)");
+                            return 1;
+                        }))
         );
     }
 
     private static void status() {
-        Minecraft mc = Minecraft.getInstance();
         String line = String.format(Locale.ROOT,
                 "[mousescrollfix] enabled=%s affect_screens=%s dedupe_window_ms=%d debug_log=%s | suppressed events this session=%d",
                 ScrollFixConfig.enabled, ScrollFixConfig.affectScreens, ScrollFixConfig.dedupeWindowMs,
                 ScrollFixConfig.debugLog, ScrollNormalizer.suppressedEvents());
         say(line);
+        say(String.format(Locale.ROOT, "[mousescrollfix] GLFW %s | backend: %s | scroll normalization does something here: %s",
+                EnvInfo.glfwVersion(), EnvInfo.windowBackend(),
+                EnvInfo.backend() == EnvInfo.Backend.WAYLAND ? "yes" : "no"));
         say("[mousescrollfix] cursor: " + CursorThemeFix.summary());
     }
 
@@ -71,6 +79,7 @@ public final class ScrollFixClientEvents {
     @SubscribeEvent
     public static void onScreenInit(ScreenEvent.Init.Post event) {
         CursorThemeFix.apply();
+        BackendHint.onScreenShown(event.getScreen());
     }
 
     @SubscribeEvent

@@ -26,4 +26,5 @@ forge*changelog.txt
 
 # Local tool state and desktop clutter
 .zcode
+.zcodeignore
 .directory
