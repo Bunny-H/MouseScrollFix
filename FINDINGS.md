@@ -14,10 +14,22 @@ GLFW 3.4.0 Wayland X11 GLX Null EGL OSMesa monotonic shared | window backend: x1
 
 - MC 1.20.1 用的 LWJGL 3.3.1，其 `lwjgl-glfw-3.3.1-natives-linux.jar` 里打包的
   `libglfw.so` **是 GLFW 3.4.0，本身带 Wayland 后端**（sha1 `e4e724fc…`，与 HMCL 解出来的一致）。
-- 但 **GLFW 3.4.0 默认选 X11**，必须由程序显式设置 `GLFW_PLATFORM` 提示才会用 Wayland。
-  MC 1.20.1 用的是 LWJGL 3.3.1，没有这个绑定，所以**永远走 X11 / XWayland**。
-- 对照实验：把系统的 GLFW 3.5.1 用 `-Dorg.lwjgl.glfw.libname=/usr/lib/libglfw.so.3` 换进来，
-  探针立刻变成 `libwayland-client mapped: true` —— **GLFW 3.5.1 才会自动选原生 Wayland**。
+- 但 **LWJGL 3.3.1 打包的这份 GLFW，在 Wayland 会话里仍然选 X11**（实测）。
+- 对照实验（同一份进程环境，只换加载的库，2026-09-19 复测）：
+
+  | 加载的 GLFW | 运行时版本字符串 | 结果 |
+  |---|---|---|
+  | LWJGL 3.3.1 自带的 `libglfw.so` | `3.4.0 Wayland X11 …` | `libwayland-client=false` → **X11** |
+  | `/usr/lib/libglfw.so.3`（发行版） | `3.5.1 Wayland X11 …` | `libwayland-client=true` → **Wayland** |
+
+- 原因**不是版本号**：上游 GLFW 3.4 与 3.5 的 `_glfwSelectPlatform` 逻辑完全一样
+  （`XDG_SESSION_TYPE=wayland` + `WAYLAND_DISPLAY` 存在就选 Wayland，见 `src/platform.c`），
+  而 LWJGL 打包的那份 `libglfw.so` 里**连 `XDG_SESSION_TYPE` 这个字符串都没有**
+  （`strings` 实测；发行版那份有），平台表顺序也还是 X11 在前 —— 也就是说它是
+  "XDG_SESSION_TYPE 选择逻辑加入之前"的 3.4 快照。
+- 结论：**要的不是"最新版"，而是一份"在 Wayland 会话里会选 Wayland"的 GLFW**
+  （GLFW ≥ 3.4 且带上这套选择逻辑；发行版自带的一般都满足。GLFW 3.3.x 根本没有 Wayland 后端，
+  所以 Ubuntu/Debian 这类老 LTS 上做不到，除非自行编译更新的 GLFW）。
 
 ## 2. 一格滚轮到底产生什么
 

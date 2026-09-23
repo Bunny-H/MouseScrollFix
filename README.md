@@ -70,8 +70,9 @@
 
 ### 2. 让 Minecraft 用原生 Wayland（必须）
 
-MC 1.20.1 自己带的 GLFW 是 3.4.0，**它默认选 X11**；系统装的 GLFW 3.5.1 才会自动选 Wayland。
-启动器不会自动帮你换，所以要手动指定。在 HMCL 里给这个实例加一条 JVM 参数：
+MC 1.20.1 自己带的 GLFW（LWJGL 3.3.1 打包的那份）**即使编译进了 Wayland 后端，在 Wayland 会话里
+也仍然选 X11**——它早于 GLFW 的 `XDG_SESSION_TYPE` 选择逻辑。发行版自带的 GLFW（Arch 上是 3.5.1）
+会自动选 Wayland，所以要把它换进来。在 HMCL 里给这个实例加一条 JVM 参数：
 
 ```
 -Dorg.lwjgl.glfw.libname=/usr/lib/libglfw.so.3
