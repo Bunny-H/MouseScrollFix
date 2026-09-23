@@ -1,4 +1,4 @@
 {
   "mousescrollfix.backend_hint.title": "Mouse Scroll Fix",
-  "mousescrollfix.backend_hint.message": "Doesn't work well on X11 / XWayland."
+  "mousescrollfix.backend_hint.message": "X11 / XWayland: scrolling tuned faster is fixed; tuned slower cannot be restored."
 }

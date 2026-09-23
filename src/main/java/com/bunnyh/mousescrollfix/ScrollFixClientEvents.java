@@ -57,13 +57,15 @@ public final class ScrollFixClientEvents {
 
     private static void status() {
         String line = String.format(Locale.ROOT,
-                "[mousescrollfix] enabled=%s affect_screens=%s dedupe_window_ms=%d debug_log=%s | suppressed events this session=%d",
-                ScrollFixConfig.enabled, ScrollFixConfig.affectScreens, ScrollFixConfig.dedupeWindowMs,
-                ScrollFixConfig.debugLog, ScrollNormalizer.suppressedEvents());
+                "[mousescrollfix] enabled=%s affect_screens=%s x11_fix=%s x11_merge_ms=%d debug_log=%s"
+                        + " | duplicates merged this session=%d",
+                ScrollFixConfig.enabled, ScrollFixConfig.affectScreens, ScrollFixConfig.x11Fix,
+                ScrollFixConfig.x11MergeMs, ScrollFixConfig.debugLog, ScrollNormalizer.mergedEvents());
         say(line);
-        say(String.format(Locale.ROOT, "[mousescrollfix] GLFW %s | backend: %s | scroll normalization does something here: %s",
-                EnvInfo.glfwVersion(), EnvInfo.windowBackend(),
-                EnvInfo.backend() == EnvInfo.Backend.WAYLAND ? "yes" : "no"));
+        say(String.format(Locale.ROOT, "[mousescrollfix] GLFW %s | backend: %s",
+                EnvInfo.glfwVersion(), EnvInfo.windowBackend()));
+        say("[mousescrollfix] scroll fix here: " + ScrollNormalizer.describeActions());
+        say("[mousescrollfix] X11 duplicate detection: " + X11Scaling.summary());
         say("[mousescrollfix] cursor: " + CursorThemeFix.summary());
     }
 

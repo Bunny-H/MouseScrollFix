@@ -15,6 +15,10 @@ import java.util.Locale;
  * one wheel notch (0.1, 0.75, 1.5, ... depending on the compositor's scroll-speed multiplier) is fed
  * straight into the vanilla method, and the number of hotbar slots it moved is recorded. With the
  * fix active every single value must move exactly one slot.
+ *
+ * <p>The second half does the same for the X11/XWayland path, where the desktop duplicates an event
+ * instead of scaling it: two events in the same instant must count as one notch, while two events
+ * 40 ms apart must count as two.
  */
 public final class ScrollSelfTest {
 
@@ -48,25 +52,30 @@ public final class ScrollSelfTest {
         out.add("GLFW             : " + EnvInfo.glfwVersion());
         out.add("window backend   : " + EnvInfo.windowBackend());
         out.add(String.format(Locale.ROOT,
-                "fix=%s  affect_screens=%s  dedupe_window_ms=%d",
-                ScrollFixConfig.enabled, ScrollFixConfig.affectScreens, ScrollFixConfig.dedupeWindowMs));
+                "fix=%s  affect_screens=%s  x11_fix=%s  x11_merge_ms=%d",
+                ScrollFixConfig.enabled, ScrollFixConfig.affectScreens,
+                ScrollFixConfig.x11Fix, ScrollFixConfig.x11MergeMs));
+        out.add("scroll fix here  : " + ScrollNormalizer.describeActions());
         out.add("each cell = hotbar slots moved by ONE synthetic scroll event of that yOffset");
+        out.add("(duplicate merging is suspended for this table, so it shows the value normalisation alone)");
         out.add(header.toString());
 
         boolean allExactlyOne = true;
-        for (double value : NOTCH_VALUES) {
-            StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "%+-9.2f", value));
-            for (int i = 0; i < REPEATS; i++) {
-                int before = mc.player.getInventory().selected;
-                invoker.mousescrollfix$invokeOnScroll(window, 0.0D, value);
-                int after = mc.player.getInventory().selected;
-                int moved = wrapDelta(before, after);
-                if (moved != -1) {
-                    allExactlyOne = false;
+        ScrollNormalizer.setMergeSuspended(true);
+        try {
+            for (double value : NOTCH_VALUES) {
+                StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "%+-9.2f", value));
+                for (int i = 0; i < REPEATS; i++) {
+                    int moved = moveBy(invoker, mc, window, 0L, value);
+                    if (moved != -1) {
+                        allExactlyOne = false;
+                    }
+                    row.append(String.format(Locale.ROOT, "%7d", moved));
                 }
-                row.append(String.format(Locale.ROOT, "%7d", moved));
+                out.add(row.toString());
             }
-            out.add(row.toString());
+        } finally {
+            ScrollNormalizer.setMergeSuspended(false);
         }
 
         out.add("(positive yOffset always walks towards lower slot indices, so -1 == one slot)");
@@ -77,7 +86,41 @@ public final class ScrollSelfTest {
         } else {
             out.add("RESULT: fix is DISABLED - the numbers above are the broken behaviour (0 = notch swallowed)");
         }
+
+        out.add("");
+        out.add("duplicate merging (X11 / XWayland): " + ScrollNormalizer.mergingActive()
+                + " | " + X11Scaling.summary());
+        if (ScrollNormalizer.mergingActive()) {
+            // Back to back is what a duplicated notch looks like (measured 0.78-0.95 ms apart on this
+            // machine); 40 ms apart is two notches by any measure.
+            ScrollNormalizer.resetTiming();
+            int together = moveBy(invoker, mc, window, 0L, 1.5D, 1.5D);
+            ScrollNormalizer.resetTiming();
+            int apart = moveBy(invoker, mc, window, 40L, 1.5D, 1.5D);
+            out.add(String.format(Locale.ROOT, "two events in the same instant : %d slot(s)  (want -1)", together));
+            out.add(String.format(Locale.ROOT, "two events 40 ms apart         : %d slot(s)  (want -2)", apart));
+            out.add(together == -1 && apart == -2
+                    ? "RESULT: PASS - duplicates merged, real notches left alone"
+                    : "RESULT: FAIL - expected -1 then -2");
+        }
         return out;
+    }
+
+    /** Calls onScroll once per value, with {@code gapMillis} in between, and returns the slots moved. */
+    private static int moveBy(MouseHandlerInvoker invoker, Minecraft mc, long window,
+                              long gapMillis, double... values) {
+        int before = mc.player.getInventory().selected;
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0 && gapMillis > 0L) {
+                try {
+                    Thread.sleep(gapMillis);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            invoker.mousescrollfix$invokeOnScroll(window, 0.0D, values[i]);
+        }
+        return wrapDelta(before, mc.player.getInventory().selected);
     }
 
     /** Emits the report to the debug log, the game log and chat. */

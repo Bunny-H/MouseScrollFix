@@ -94,6 +94,7 @@ def main():
     notches = int(sys.argv[2])
     dev_name = "uinput-wheel-probe"
     vendor, product = 0x1234, 0x5678
+    delay_ms = 200
     args = sys.argv[3:]
     i = 0
     while i < len(args):
@@ -103,6 +104,8 @@ def main():
             vendor = int(args[i + 1], 0); i += 2
         elif args[i] == "--product":
             product = int(args[i + 1], 0); i += 2
+        elif args[i] == "--delay":
+            delay_ms = int(args[i + 1]); i += 2
         else:
             raise SystemExit("bad arg " + args[i])
 
@@ -118,8 +121,8 @@ def main():
     print(f"target window {win} ('{target_name}'), pointer aimed at {spot}, verified over target")
 
     print(f"emitting {notches} notches as device '{dev_name}' "
-          f"(vendor=0x{vendor:04x} product=0x{product:04x})")
-    emit_device(dev_name, vendor, product, notches, 200)
+          f"(vendor=0x{vendor:04x} product=0x{product:04x}), {delay_ms} ms apart")
+    emit_device(dev_name, vendor, product, notches, delay_ms)
     print("done")
 
 

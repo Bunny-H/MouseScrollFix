@@ -1,4 +1,4 @@
 {
   "mousescrollfix.backend_hint.title": "Mouse Scroll Fix",
-  "mousescrollfix.backend_hint.message": "X11 / XWayland 下效果不好。"
+  "mousescrollfix.backend_hint.message": "X11 / XWayland 下：滚轮被系统调快的已修复；被调慢的无法还原。"
 }

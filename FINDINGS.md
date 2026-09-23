@@ -87,12 +87,14 @@ public void swapPaint(double d) {
 | 在游戏里改 `discrete_mouse_scroll` | ✗ 无效：事件本来就是 ±1 |
 | 在游戏里改「滚轮灵敏度」 | ✗ 只能改变每个事件的步数，改不了事件个数 |
 | 统计意义上的 UI 滚动库（JEI 等） | ✗ 同理 |
-| 写 Mixin 归一化 `yOffset` | ✗ 在 X11 下是空操作（实测值本来就是 ±1.0） |
+| Mixin 归一化 `yOffset`（v1.2.0 的做法） | ✗ 在 X11 下是空操作（实测值本来就是 ±1.0） |
+| **Mixin 合并同一瞬间的重复事件（v1.3.0）** | **✓ 倍率 > 1 时有效，见第 8 节（实测 130 个复制对全部合上）** |
+| 还原倍率 < 1 时被吞掉的格 | ✗ 不可能：信息在到达游戏之前就没了 |
 | **把该设备的 KWin 滚动速度设为 1.0** | ✓ 实测 12 格 → 12 事件 → 12 格，与 Windows 完全一致 |
 | 让游戏跑原生 Wayland + 归一化 Mixin | ✓ 已实测可行，见第 5 节 |
 
-**结论：在 X11 路径上，物理滚了多少格这个信息在到达游戏之前就被销毁了，
-任何客户端 mod 都无法把它还原。**
+**结论（2026-09-24 修订）**：倍率 > 1 时，多出来的事件是同一格的复制品（跟原事件相隔
+不到 1 毫秒），可以认出来并只算一格；倍率 < 1 时被吞掉的格没有任何办法还原。
 
 ## 5. 原生 Wayland 路径（最终采用的方案）
 
@@ -146,8 +148,9 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 |---|---|
 | `wheel.py` | 通过 `/dev/uinput` 造一个虚拟鼠标并发 N 格滚轮。`--name/--vendor/--product` 可以让 KWin 把它当成你某只真鼠标，从而套用 `kcminputrc` 里那台设备的 ScrollFactor |
 | `click.py` | 通过 uinput 发真实左键点击（原生 Wayland 客户端收不到 XTest 事件，`xdotool click` 没用） |
-| `ScrollProbe.java` | 用游戏同款 LWJGL/GLFW 开一个窗口并打印每个滚轮事件的值；同时从 `/proc/self/maps` 判断实际选中的是 Wayland 还是 X11 |
-| `aim_and_wheel.py` | 用 xdotool 把指针移到指定窗口上（会自检是否真的移上去了）再发滚轮 |
+| `ScrollProbe.java` + `run_probe.sh` | 用游戏同款 LWJGL/GLFW 开一个窗口并打印每个滚轮事件的值 **和相邻事件的间隔（`dtMicros`）**；同时从 `/proc/self/maps` 判断实际选中的是 Wayland 还是 X11。`run_probe.sh` 负责编译与运行（默认 X11，加 `--wayland` 换系统 GLFW） |
+| `summary.py` | 把 `logs/mousescrollfix-debug.log` 汇总成「收到多少事件 / 合并多少重复 / 实际切了几格」，用于核对上面的表格 |
+| `aim_and_wheel.py` | 用 xdotool 把指针移到指定窗口上（会自检是否真的移上去了）再发滚轮；`--delay` 控制每格间隔 |
 | `kwin_helper.js` | KWin 脚本：把 Minecraft 窗口置顶并打印其几何位置（Wayland 下应用自己拿不到窗口坐标） |
 
 ```bash
@@ -187,3 +190,97 @@ python3 tools/wheel.py 12 --delay 200 \
 | 最终版本（重构后） | **33.9** | 130.6 | Breeze |
 
 三次开启状态下的最佳匹配缩放都是 1.25，与外接屏的分数缩放一致，说明拿到的就是主题里那一档图。
+
+## 8. X11 / XWayland 路径（v1.3.0）：合并「被复制的同一个格」
+
+全部为 2026-09-24 本机实测（CachyOS / KDE Plasma 6.7.5 / KWin 6.7.5 / XWayland，
+游戏内是 LWJGL 3.3.1 自带的 GLFW 3.4.0）。
+
+### 8.1 复制事件长什么样（探针 + 虚拟鼠标，每次「转 12 格」）
+
+| 冒充的设备（ScrollFactor） | 转格节奏 | 收到事件 | 相邻事件间隔 |
+|---|---|---|---|
+| 无（默认 1.0） | 200 ms | 12 | 200 ms |
+| Rapoo（1.5） | 200 ms | **18** | 200 ms 与 **780–947 µs** 交替 |
+| Rapoo（1.5） | 20 ms（50 格/秒） | **18** | 20 ms 与 **189–471 µs** 交替 |
+| Rapoo（1.5） | 5 ms（200 格/秒） | **18** | 5 ms 与 **148–531 µs** 交替 |
+| ITE 键盘（0.75） | 200 ms | **9** | `200 200 400` 循环 |
+
+所有事件的值都是 `+1.0`。**复制出来的那个事件紧跟原事件不到 1 毫秒**，而真实格与格之间
+即使狠转也有几毫秒（5 ms 那行已经是 200 格/秒，人手做不到）。1.5 倍时 12 格产生 18 个事件
+（第 2、4、6…格各多一个），0.75 倍时 12 格只剩 9 个（第 4、8、12 格被整格吞掉）。
+
+### 8.2 游戏内实测（开发客户端跑 XWayland，虚拟鼠标冒充 Rapoo 1.5）
+
+| 配置 | 转 12 格 | 收到事件 | 判为复制 | 物品栏实际切格 |
+|---|---|---|---|---|
+| `x11_fix = "off"`（等于没有这个修复） | 12 | 18 | 0 | **18** ← 跳格 |
+| `x11_fix = "auto"`（默认） | 12 | 18 | 6 | **12** ← 一格一格 |
+| 默认设备（倍率 1.0） | 12 | 12 | 0 | 12（不受影响） |
+| Rapoo，每 20 ms 一格（50 格/秒） | 12 | 18 | 6 | **12**（快滚没被吃掉） |
+
+默认设置那行的物品栏路径：`8,7,6,5,4,3,2,1,0,8,7,6,5` —— 12 格正好 12 步（含 9 格回绕）。
+被合并的复制事件实测间隔 138–197 µs，判定窗口是 2 ms，差 10 倍以上。
+
+**漏合并**（复制事件恰好落在两帧之间、被当成新的一格）实测：主菜单连续 200 格
+（每 50 ms 一格）→ 收到 300 个事件 = 200 × 1.5、100 对全部合上、最终正好 200 步；
+再加上先前 30 对与世界内 12 对，共 142 对，**一个都没漏**。
+
+游戏内自检（`self_test_on_join = true`）也覆盖这条路径：
+
+```
+duplicate merging (X11 / XWayland): true | this desktop duplicates wheel events (ScrollFactor 1.50 in .../kcminputrc (Libinput][9390][5138][Rapoo Rapoo Gaming Device))
+two events in the same instant : -1 slot(s)  (want -1)
+two events 40 ms apart         : -2 slot(s)  (want -2)
+RESULT: PASS - duplicates merged, real notches left alone
+```
+
+### 8.3 为什么默认只在「倍率 > 1」时合并
+
+`x11_fix = auto`（默认）只在 KDE 的 `kcminputrc` 里读到 **ScrollFactor > 1** 时才启用合并：
+倍率 ≤ 1 的机器上根本不存在复制事件，mod 于是完全不介入，也就不会把「转得飞快时两格落在
+同一帧」误判成复制而吃掉真实输入。合并窗口（`x11_merge_ms = 2`）比复制事件的间隔大 2–10 倍，
+比任何真实的两格间隔小 2 个数量级。
+
+已知边界：自由滚轮（无段落感的飞轮）与触控板在 X11 下能报出每秒上百次点击，其中同帧的部分
+会被这条规则合掉；有段落感的鼠标物理上做不到（需要 ≥ 125 格/秒）。
+
+### 8.4 为什么不能相信 `user.home`（v1.3.0 实测踩到的坑）
+
+用户在自己的 HMCL 纯净实例（`versions/1.20.1-Forge`）里装 1.3.0 后**完全没有效果**，
+日志里是：
+
+```
+window backend: x11 / xwayland
+scroll fix in this session: nothing (no scaler detected on this backend, or merging turned off)
+X11 detection: no KDE wheel ScrollFactor configured, nothing to merge
+```
+
+同一个用户、同一份 `~/.config/kcminputrc`（603 字节、纯 ASCII、`ScrollFactor=1.5` 就在里面），
+开发客户端里能读到、HMCL 里读不到。原因在 HMCL 记录的启动命令里：
+
+```
+"-Duser.home=/home/bunnyh/.config/hmcl"
+```
+
+**HMCL 把游戏的 `user.home` 指向了自己的数据目录**，于是按 `user.home/.config/kcminputrc`
+去找就变成了 `~/.config/hmcl/.config/kcminputrc` —— 不存在。而 `HOME` 环境变量在游戏的进程里
+仍然是 `/home/bunnyh`（HMCL 的子进程照常继承）。v1.1.0 的游标主题功能用的是同一套路径逻辑，
+所以在 HMCL 实例里（原生 Wayland 下）它其实也一直静默跳过。
+
+修法（`DesktopFiles`）：`HOME` 优先，`user.home` 只作兜底；并且把**所有**可能的位置都查一遍
+（`$XDG_CONFIG_HOME`、`$HOME/.config`、`$(user.home)/.config`、以及 `user.home` 上溯两级的
+`.config`——最后这条让「连 HOME 都没传」的环境也能找到）；找不到时日志会把查过的文件列出来，
+下次再出现「没效果」可以直接从日志判断是路径问题还是真的没有倍率。
+
+验证（同一份 jar，四种环境，走的就是游戏里那套代码）：
+
+| 环境 | 结果 |
+|---|---|
+| 开发客户端（有 `XDG_CONFIG_HOME`，无 `-Duser.home`） | 读到 `ScrollFactor 1.50` ✓ |
+| `-Duser.home=~/.config/hmcl`，无 `XDG_CONFIG_HOME`（= HMCL） | 读到 `ScrollFactor 1.50` ✓ |
+| 同上、连 `HOME` 也没有 | 读到 `ScrollFactor 1.50` ✓（靠上溯） |
+| 故意给错 `user.home`、无 `HOME` | 正确报告「找不到」并列出查过的文件 ✓ |
+
+游戏内验证：以 HMCL 同样条件启动的客户端里，12 格 → 12 格（合并 6 个复制事件），
+用户随后在自己的 HMCL 实例里实测：「效果非常好」。

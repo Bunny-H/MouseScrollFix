@@ -11,9 +11,20 @@ public final class ScrollFixConfig {
 
     public static final ForgeConfigSpec SPEC;
 
+    /** What to do about the X11/XWayland path, where the desktop duplicates events instead of scaling them. */
+    public enum X11Fix {
+        /** Merge only when KDE's configuration says some device has a ScrollFactor above 1. */
+        AUTO,
+        /** Merge on any X11/XWayland session. */
+        ON,
+        /** Never merge. */
+        OFF
+    }
+
     private static final ForgeConfigSpec.BooleanValue ENABLED;
     private static final ForgeConfigSpec.BooleanValue AFFECT_SCREENS;
-    private static final ForgeConfigSpec.IntValue DEDUPE_WINDOW_MS;
+    private static final ForgeConfigSpec.EnumValue<X11Fix> X11_FIX;
+    private static final ForgeConfigSpec.IntValue X11_MERGE_MS;
     private static final ForgeConfigSpec.BooleanValue DEBUG_LOG;
     private static final ForgeConfigSpec.BooleanValue SELF_TEST_ON_JOIN;
     private static final ForgeConfigSpec.BooleanValue BACKEND_HINT;
@@ -24,7 +35,8 @@ public final class ScrollFixConfig {
     /** Mirrors of the config values, pre-seeded with the spec defaults. */
     public static volatile boolean enabled = true;
     public static volatile boolean affectScreens = true;
-    public static volatile int dedupeWindowMs = 0;
+    public static volatile X11Fix x11Fix = X11Fix.AUTO;
+    public static volatile int x11MergeMs = 2;
     public static volatile boolean debugLog = false;
     public static volatile boolean selfTestOnJoin = false;
     public static volatile boolean backendHint = true;
@@ -50,12 +62,36 @@ public final class ScrollFixConfig {
                         "false = only normalize the in-world hotbar; GUIs keep following the system scroll speed.")
                 .define("affect_screens", true);
 
-        DEDUPE_WINDOW_MS = b.comment(
-                        "Duplicate-event guard. If one physical wheel notch is reported as two GLFW scroll",
-                        "events within this many milliseconds, the second one is dropped. 0 disables the guard.",
-                        "Measured on this machine: GLFW 3.4 emits exactly one event per notch, so 0 is correct",
-                        "and is the default. Only raise this if one notch still moves two slots.")
-                .defineInRange("dedupe_window_ms", 0, 0, 500);
+        b.comment(
+                "",
+                "--- X11 / XWayland ---",
+                "On X11 (including XWayland) a scroll-speed multiplier cannot scale the VALUE of a scroll",
+                "event: the protocol has no fractional wheel deltas and GLFW always reports +-1.0 there.",
+                "The desktop emits extra events instead. Measured with KWin and ScrollFactor 1.5: one",
+                "physical notch arrives as two events 780-950 microseconds apart, so the game moves two",
+                "slots for one notch. Two events that close cannot be two real notches (that would be over",
+                "a thousand notches per second, and they always land in the same frame's event batch), so",
+                "the duplicate is recognised and dropped.",
+                "A multiplier BELOW 1 cannot be undone: there the desktop swallows notches before the game",
+                "sees anything, and that information is gone."
+        );
+        X11_FIX = b.comment(
+                        "auto = merge duplicates only when this desktop is known to duplicate wheel events,",
+                        "       i.e. when KDE's kcminputrc contains a ScrollFactor above 1 (which also means",
+                        "       the mod cannot get in the way of systems it has nothing to fix on),",
+                        "on   = always merge on X11/XWayland,",
+                        "off  = never merge; X11/XWayland then behaves as if this mod were not installed.")
+                .defineEnum("x11_fix", X11Fix.AUTO);
+
+        X11_MERGE_MS = b.comment(
+                        "Two scroll events of the same direction closer together than this are one notch.",
+                        "The duplicates measured on this machine are 0.8 ms apart while real notches are",
+                        "tens of milliseconds apart even when the wheel is spun hard. In practice this",
+                        "means at most one step per rendered frame.",
+                        "A wheel with detents cannot clear two notches inside one frame, so real input is not",
+                        "affected; a free-spinning wheel or a touchpad (which can report a click every 1-3 ms)",
+                        "can reach the limit. 0 turns the merging off.")
+                .defineInRange("x11_merge_ms", 2, 0, 100);
 
         DEBUG_LOG = b.comment(
                         "Write every scroll event (raw value, normalized value, resulting hotbar slot) to",
@@ -69,7 +105,7 @@ public final class ScrollFixConfig {
 
         BACKEND_HINT = b.comment(
                         "If the game is NOT running on native Wayland (i.e. under X11 or XWayland), show a",
-                        "short notice on the main menu saying the fix does not work well there.",
+                        "short notice on the main menu saying which half of the problem can be fixed there.",
                         "Only a positively detected Linux X11/XWayland backend triggers it; on Windows and",
                         "macOS the backend cannot be detected, so nothing is ever shown there.")
                 .define("backend_hint", true);
@@ -115,22 +151,29 @@ public final class ScrollFixConfig {
         try {
             enabled = ENABLED.get();
             affectScreens = AFFECT_SCREENS.get();
-            dedupeWindowMs = DEDUPE_WINDOW_MS.get();
+            x11Fix = X11_FIX.get();
+            x11MergeMs = X11_MERGE_MS.get();
             debugLog = DEBUG_LOG.get();
             selfTestOnJoin = SELF_TEST_ON_JOIN.get();
             backendHint = BACKEND_HINT.get();
             fixCursorTheme = FIX_CURSOR_THEME.get();
             cursorTheme = CURSOR_THEME.get();
             cursorSize = CURSOR_SIZE.get();
+            // The merge decision depends on the config, so it has to be taken again.
+            ScrollNormalizer.onConfigChanged();
             // A config change may have turned the cursor fix back on, or changed the theme name.
             CursorThemeFix.reset();
             MouseScrollFix.LOGGER.info(
-                    "[mousescrollfix] config loaded: enabled={}, affect_screens={}, dedupe_window_ms={}, debug_log={}",
-                    enabled, affectScreens, dedupeWindowMs, debugLog);
+                    "[mousescrollfix] config loaded: enabled={}, affect_screens={}, x11_fix={}, x11_merge_ms={}, debug_log={}",
+                    enabled, affectScreens, x11Fix, x11MergeMs, debugLog);
             MouseScrollFix.LOGGER.info("[mousescrollfix] GLFW {} | window backend: {}",
                     EnvInfo.glfwVersion(), EnvInfo.windowBackend());
+            MouseScrollFix.LOGGER.info("[mousescrollfix] scroll fix in this session: {} | X11 detection: {}",
+                    ScrollNormalizer.describeActions(), X11Scaling.summary());
             ScrollDebugLog.writeForced("# GLFW " + EnvInfo.glfwVersion()
-                    + " | window backend: " + EnvInfo.windowBackend());
+                    + " | window backend: " + EnvInfo.windowBackend()
+                    + " | scroll fix: " + ScrollNormalizer.describeActions()
+                    + " | X11 detection: " + X11Scaling.summary());
         } catch (IllegalStateException e) {
             // Config not loaded yet - the static defaults above are the spec defaults anyway.
             MouseScrollFix.LOGGER.warn("[mousescrollfix] config not loaded yet, using defaults");

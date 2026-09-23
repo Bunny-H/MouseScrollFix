@@ -201,9 +201,11 @@ public final class CursorThemeFix {
 
     private static List<Path> iconDirs() {
         List<Path> dirs = new ArrayList<>();
-        dirs.add(dataHome().resolve("icons"));
-        dirs.add(userHome().resolve(".icons"));
-        for (Path dir : dataDirs()) {
+        for (Path dataHome : DesktopFiles.dataHomes()) {
+            dirs.add(dataHome.resolve("icons"));
+        }
+        dirs.add(DesktopFiles.home().resolve(".icons"));
+        for (Path dir : DesktopFiles.dataDirs()) {
             dirs.add(dir.resolve("icons"));
         }
         return dirs;
@@ -214,19 +216,21 @@ public final class CursorThemeFix {
      * user's own file, then system configs, then the {@code kdedefaults} that Plasma look-and-feel
      * themes install - the cursor theme usually lives in that last one, which is why a plain
      * {@code kcminputrc} lookup comes up empty on a stock install.
+     *
+     * <p>The directories come from {@link DesktopFiles} rather than from {@code user.home} directly:
+     * launchers such as HMCL point {@code user.home} at their own data directory.
      */
     private static List<Path> kdeConfigFiles() {
         List<Path> files = new ArrayList<>();
-        Path config = configHome();
-        files.add(config.resolve("kcminputrc"));
-        for (Path dir : configDirs()) {
-            files.add(dir.resolve("kcminputrc"));
+        for (Path config : DesktopFiles.configHomes()) {
+            files.add(config.resolve("kcminputrc"));
+            files.add(config.resolve("kdedefaults/kcminputrc"));
         }
-        files.add(config.resolve("kdedefaults/kcminputrc"));
-        for (Path dir : configDirs()) {
+        for (Path dir : DesktopFiles.configDirs()) {
+            files.add(dir.resolve("kcminputrc"));
             files.add(dir.resolve("kdedefaults/kcminputrc"));
         }
-        for (Path dir : dataDirs()) {
+        for (Path dir : DesktopFiles.dataDirs()) {
             files.add(dir.resolve("kdedefaults/kcminputrc"));
         }
         return files;
@@ -267,8 +271,12 @@ public final class CursorThemeFix {
     }
 
     private static List<Path> gtkSettingsFiles() {
-        Path config = configHome();
-        return List.of(config.resolve("gtk-4.0/settings.ini"), config.resolve("gtk-3.0/settings.ini"));
+        List<Path> files = new ArrayList<>();
+        for (Path config : DesktopFiles.configHomes()) {
+            files.add(config.resolve("gtk-4.0/settings.ini"));
+            files.add(config.resolve("gtk-3.0/settings.ini"));
+        }
+        return files;
     }
 
     /** Plain INI lookup; {@code section == null} matches the key in any section. */
@@ -299,38 +307,6 @@ public final class CursorThemeFix {
             MouseScrollFix.LOGGER.debug("[mousescrollfix] could not read {}: {}", file, e.toString());
         }
         return null;
-    }
-
-    private static Path userHome() {
-        return Path.of(System.getProperty("user.home", ""));
-    }
-
-    private static Path configHome() {
-        String value = System.getenv("XDG_CONFIG_HOME");
-        return isBlank(value) ? userHome().resolve(".config") : Path.of(value);
-    }
-
-    private static Path dataHome() {
-        String value = System.getenv("XDG_DATA_HOME");
-        return isBlank(value) ? userHome().resolve(".local/share") : Path.of(value);
-    }
-
-    private static List<Path> configDirs() {
-        return splitPaths(System.getenv("XDG_CONFIG_DIRS"), "/etc/xdg");
-    }
-
-    private static List<Path> dataDirs() {
-        return splitPaths(System.getenv("XDG_DATA_DIRS"), "/usr/local/share:/usr/share");
-    }
-
-    private static List<Path> splitPaths(String value, String fallback) {
-        List<Path> dirs = new ArrayList<>();
-        for (String part : (isBlank(value) ? fallback : value).split(":")) {
-            if (!part.isBlank()) {
-                dirs.add(Path.of(part));
-            }
-        }
-        return dirs;
     }
 
     private static int parseInt(String value) {

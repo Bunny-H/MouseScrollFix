@@ -8,13 +8,14 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 
 /**
- * Tells the player, on the main menu, that this mod does not work well on X11/XWayland.
+ * Tells the player, on the main menu, what this mod can and cannot do on X11/XWayland.
  *
- * <p>Only a positively detected X11/XWayland backend triggers the notice - the one situation where
- * the player's scroll problem comes from a compositor multiplier that GLFW can only express as
- * extra wheel events, which this mod deliberately does not touch. On Windows and macOS nothing is
- * shown: there is no compositor scroll multiplier to fight, and the backend is not detectable there
- * anyway (so a false alarm is impossible by construction).
+ * <p>Only a positively detected X11/XWayland backend triggers the notice. There the desktop cannot
+ * scale the value of a wheel event, so it emits extra events instead - that half of the problem this
+ * mod repairs (see {@link ScrollNormalizer}). A multiplier below 1 destroys notches before the game
+ * sees them, and no client-side mod can bring those back, so the notice says so. On Windows and macOS
+ * nothing is shown: there is no compositor scroll multiplier to fight, and the backend is not
+ * detectable there anyway (so a false alarm is impossible by construction).
  *
  * <p>Shown at most once per game launch; {@code /mousescrollfix hint} shows it on demand.
  */
@@ -55,6 +56,7 @@ public final class BackendHint {
                 Component.translatable(TITLE_KEY),
                 Component.translatable(MESSAGE_KEY)));
         MouseScrollFix.LOGGER.info(
-                "[mousescrollfix] backend hint shown: the game is not on native Wayland (backend: {})", backend);
+                "[mousescrollfix] backend hint shown: the game is not on native Wayland (backend: {}, scroll fix: {})",
+                backend, ScrollNormalizer.describeActions());
     }
 }

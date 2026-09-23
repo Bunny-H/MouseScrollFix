@@ -15,7 +15,6 @@ public final class ScrollDebugLog {
 
     private static BufferedWriter writer;
     private static boolean disabled;
-    private static long lastFlush;
 
     private ScrollDebugLog() {
     }
@@ -37,10 +36,14 @@ public final class ScrollDebugLog {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             if (fresh) {
                 writer.write("# mousescrollfix debug log\n");
+                writer.write("# t       = milliseconds since the epoch, so a line can be matched against\n");
+                writer.write("#           the timestamps printed by tools/wheel.py\n");
                 writer.write("# raw     = yOffset exactly as GLFW delivered it (already scaled by the compositor)\n");
-                writer.write("# norm    = value after normalization (what vanilla MouseHandler.onScroll now sees)\n");
+                writer.write("# norm    = value after the fix (what vanilla MouseHandler.onScroll now sees)\n");
+                writer.write("# gapUs   = microseconds since the previous event (-1 = first one in this session)\n");
                 writer.write("# ctx     = world = hotbar path, screen = a GUI consumed it, none = overlay/no player\n");
                 writer.write("# slotBefore = hotbar slot index before this event was applied\n");
+                writer.write("# DUPLICATE-DROPPED = the second half of a duplicated notch (X11/XWayland), not a step\n");
             }
             writer.write("# ---- session started " + LocalDateTime.now() + " ----\n");
             writer.flush();
@@ -59,7 +62,10 @@ public final class ScrollDebugLog {
         writeForced(line);
     }
 
-    /** Always written, even when {@code debug_log} is off (used by the explicit self test). */
+    /**
+     * Every line is flushed immediately: the log is read while the game is still running (that is the
+     * whole point of it), and a buffered tail shows up as missing events.
+     */
     public static synchronized void writeForced(String line) {
         BufferedWriter w = writer();
         if (w == null) {
@@ -68,11 +74,7 @@ public final class ScrollDebugLog {
         try {
             w.write(line);
             w.write('\n');
-            long now = System.currentTimeMillis();
-            if (now - lastFlush > 500L) {
-                lastFlush = now;
-                w.flush();
-            }
+            w.flush();
         } catch (IOException e) {
             disabled = true;
         }

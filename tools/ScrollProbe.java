@@ -59,8 +59,17 @@ public class ScrollProbe {
         System.out.println("Each line = ONE GLFW scroll event. Ctrl-C in the terminal when done.");
         System.out.flush();
 
-        glfwSetScrollCallback(window, (win, xoffset, yoffset) ->
-                System.out.printf("EVENT t=%d x=%+.6f y=%+.6f%n", System.currentTimeMillis(), xoffset, yoffset));
+        // dt = microseconds since the previous event. Two events belonging to the SAME physical
+        // notch (compositor replication) show up as dt of a few microseconds; separate notches are
+        // milliseconds apart, however fast the wheel is spun.
+        long[] prev = {0L};
+        glfwSetScrollCallback(window, (win, xoffset, yoffset) -> {
+            long t = System.nanoTime();
+            long dtMicros = prev[0] == 0L ? -1L : (t - prev[0]) / 1_000L;
+            prev[0] = t;
+            System.out.printf("EVENT t=%d dtMicros=%d x=%+.6f y=%+.6f%n",
+                    System.currentTimeMillis(), dtMicros, xoffset, yoffset);
+        });
 
         while (!glfwWindowShouldClose(window)) {
             glfwWaitEventsTimeout(0.2);
