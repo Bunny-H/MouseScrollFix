@@ -28,3 +28,4 @@ forge*changelog.txt
 .zcode
 .zcodeignore
 .directory
+__pycache__/

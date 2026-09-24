@@ -1,5 +1,7 @@
 # Mouse Scroll Fix — Minecraft 1.20.1 / Forge 47.4.21
 
+<img src="src/main/resources/logo.png" width="140" alt="Mouse Scroll Fix logo">
+
 让鼠标滚轮「转一格 = 切一格」，不再受 KDE 的「滚动速度」设置影响 —— 原生 Wayland 与
 X11 / XWayland 两条路都管（X11 下只能修「被调快」的一半，原因见第一节）。
 换成原生 Wayland 后带来的鼠标指针问题（箭头变成系统默认样式）也由 mod 一并修好。
@@ -325,4 +327,20 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew runClient -Pwayland -Pquickplay
 `spectacle -b -p` 截图带指针、`keys.py` 用 uinput 发按键（XTest 的按键到不了 Wayland 原生
 客户端）、`kwin_query.js` 查窗口几何。
 
+`make_logo.py` 是 mod 图标的**生成器**（不是二进制素材，需要 Pillow）：64×64 网格上的像素画，
+改脚本里的颜色和坐标即可，`python3 tools/make_logo.py src/main/resources/logo.png --preview
+/tmp/x.png` 重画，`--preview` 会同时输出一张「各种尺寸 + 深浅两种背景」的对照图，用来检查
+小尺寸下的可读性。
+
 实测数据与复现方法见 [`FINDINGS.md`](FINDINGS.md)（第 8 节是 X11 / XWayland 那套）。
+
+## 十、许可证
+
+**GNU Lesser General Public License v3.0**（SPDX：`LGPL-3.0-only`）。
+
+- 全文见 [`LICENSE`](LICENSE)；因为 LGPL-3.0 在条款上引用 GPL-3.0，所以一并附上
+  [`LICENSE.GPL-3.0`](LICENSE.GPL-3.0)。两份文本也打进了 jar，解包即可看到。
+- **你可以自由使用、修改、再发布这个 mod**：装进整合包、录视频、在服务器上使用都不触发任何
+  开源义务，也不需要来问作者要授权。
+- 唯一的条件是：**把其中的代码复制进自己的 mod 并发布时，你的 mod 也必须以 LGPL-3.0
+  兼容的许可开源**，并保留原版权声明与改动说明 —— 这个 mod 不接受被闭源抄走。
