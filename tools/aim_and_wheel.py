@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 BunnyH
+#
+# This file is part of Mouse Scroll Fix (mousescrollfix), a Minecraft mod.
+#
+# Mouse Scroll Fix is free software: you can redistribute it and/or modify it under the terms
+# of the GNU Lesser General Public License as published by the Free Software Foundation,
+# version 3 of the License.
+#
+# Mouse Scroll Fix is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License along with
+# Mouse Scroll Fix. If not, see <https://www.gnu.org/licenses/>.
+
 """Aim the pointer at a target X window, verify it landed, then emit wheel notches.
 
 Usage: aim_and_wheel.py <window-name-substring> <notches> [--device-name N] [--vendor V] [--product P]

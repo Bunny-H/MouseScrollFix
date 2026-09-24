@@ -205,6 +205,11 @@ tasks.named('jar', Jar).configure {
         ])
     }
 
+    // Convey the license texts with the binary: LGPL-3.0 incorporates the terms of GPL-3.0, so
+    // both documents have to travel with every copy that is handed on.
+    from('LICENSE')
+    from('LICENSE.GPL-3.0')
+
     // This is the preferred method to reobfuscate your jar file
     finalizedBy 'reobfJar'
 }
