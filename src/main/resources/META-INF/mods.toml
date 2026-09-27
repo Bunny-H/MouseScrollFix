@@ -1,6 +1,9 @@
 modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
+# File-level key. Forge puts it in crash reports as "Mod Issue URL"; it is not shown
+# on the Mods list screen.
+issueTrackerURL="${mod_issues_url}"
 
 # Purely client-side: Forge skips loading it on dedicated servers and
 # automatically sets displayTest=IGNORE_ALL_VERSION so servers never show a red X.
@@ -13,6 +16,10 @@ displayName="${mod_name}"
 authors="${mod_authors}"
 description='''${mod_description}'''
 logoFile="logo.png"
+# Shown as the mod's homepage on the Mods list screen. Forge's ModListScreen reads
+# the per-mod key "displayURL"; "modUrl" (and ModInfo.getModURL) is never used by
+# Forge 47.4.21 itself, so writing that name would have no visible effect.
+displayURL="${mod_url}"
 
 [[dependencies.${mod_id}]]
     modId="forge"
