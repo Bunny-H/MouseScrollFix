@@ -1,4 +1,10 @@
 {
   "mousescrollfix.backend_hint.title": "Mouse Scroll Fix",
-  "mousescrollfix.backend_hint.message": "X11 / XWayland: scrolling tuned faster is fixed; tuned slower cannot be restored."
+  "mousescrollfix.backend_hint.message": "X11 / XWayland: scrolling tuned faster is fixed; tuned slower cannot be restored.",
+  "mousescrollfix.config.title": "Mouse Scroll Fix Settings",
+  "mousescrollfix.config.cursor": "Mouse pointer: %s",
+  "mousescrollfix.config.cursor.default": "GLFW default",
+  "mousescrollfix.config.cursor.theme": "Desktop theme cursor",
+  "mousescrollfix.config.cursor.hint": "Click to switch. The two differ only on native Wayland; under X11 / XWayland the desktop theme is already what you get.",
+  "mousescrollfix.config.cursor.tooltip": "The desktop theme cursor may be incompatible with other mods."
 }

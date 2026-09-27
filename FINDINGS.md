@@ -191,6 +191,9 @@ python3 tools/wheel.py 12 --delay 200 \
 
 三次开启状态下的最佳匹配缩放都是 1.25，与外接屏的分数缩放一致，说明拿到的就是主题里那一档图。
 
+> **v1.4.0 起这一节的功能默认关闭**（原因见第 9 节）：默认用 GLFW 自己的光标，要桌面主题光标
+> 得在 Mods 列表里打开本 mod 的设置界面拨开关。滚轮修复不受影响。
+
 ## 8. X11 / XWayland 路径（v1.3.0）：合并「被复制的同一个格」
 
 全部为 2026-09-24 本机实测（CachyOS / KDE Plasma 6.7.5 / KWin 6.7.5 / XWayland，
@@ -284,3 +287,41 @@ X11 detection: no KDE wheel ScrollFactor configured, nothing to merge
 
 游戏内验证：以 HMCL 同样条件启动的客户端里，12 格 → 12 格（合并 6 个复制事件），
 用户随后在自己的 HMCL 实例里实测：「效果非常好」。
+
+## 9. 整合包内崩溃调查（v1.4.0）：`glfwSetCursor` 撞上野指针
+
+**现象**：2026-09-27，用户在自己的 DAdv 整合包（HMCL 启动，Forge 47.4.21，日志里 246 个 mod）里
+玩了一小时后**原生崩溃**（`hs_err_pid103604.log` + 3.8 GB core dump，都在 `err/`）。崩溃帧：
+
+```
+C  [libwayland-client.so.0+0x7f1a]  wl_proxy_marshal_flags+0xca
+J  org.lwjgl.glfw.GLFW.glfwSetCursor
+J  com.bunnyh.mousescrollfix.CursorThemeFix.apply()   ← 本 mod 的游标主题功能（整合包里是旧 jar 1.1.0）
+J  ScreenEvent.Init.Post（刚要打开界面）
+```
+
+**调查步骤**（每步都可复现）：
+
+| # | 做法 | 得到的事实 |
+|---|---|---|
+| 1 | 反汇编 `libwayland-client.so.0.26.0` 崩溃指令前后 | 崩在 `mov 0x8(%rax),%rdi`（读 `interface->methods[opcode]`），`si_addr = 0x8` ⇒ `methods == NULL`：那个"Wayland 对象"根本不是对象 |
+| 2 | gdb 读 core：GLFW 递出去的指针指向的内存 | 里面是别的字符串数据（`"MDOExtra"`…），不是 `wl_proxy` ⇒ 对象早被销毁、内存已被复用 |
+| 3 | 反汇编 `libglfw.so.3.5` 里返回地址所在的函数（0x25100） | 它是 `unlockPointer()`：`zwp_relative_pointer_v1_destroy` + `zwp_locked_pointer_v1_destroy`——正是"游戏放开鼠标"时销毁相对指针/锁定指针那段 |
+| 4 | 对照 GLFW 3.5.1 源码（`wl_window.c`） | 每个 destroy 之后紧接着 `= NULL`；**单线程执行不可能留下"字段非空、对象已释放"** ⇒ 必然有第二个执行者同时改同一份状态 |
+| 5 | 读 core 里同一窗口的那两个字段 | 都已经是 0（"销毁+置空"在别处已经跑完）——与竞态吻合 |
+| 6 | 查环境 | 整合包带 **Ixeris 4.5.2**（mods.toml: "Buffered raw input and threaded event polling"；`config/ixeris.toml`: `flexibleThreading=true`、`fullyBlockingMode=false`），且**故意不带 LWJGL 自带的 GLFW**，实际加载系统 `/usr/lib/libglfw.so.3.5`（`glfw 1:3.5.1-1.1`）——GLFW 的 Wayland 后端不是线程安全的 |
+
+**结论**：被弄坏的状态（相对指针、锁定指针）是**原版**在抓取/释放鼠标时创建销毁的；Ixeris 把 GLFW
+事件轮询放到另一个线程，两个线程会同时进同一段销毁/创建逻辑 ⇒ 一边已经销毁并置空，另一边还拿着旧
+地址调 libwayland。本 mod 是**整个客户端里唯一调用 `glfwSetCursor` 的代码**（原版只用
+`glfwSetCursorPos` 和光标回调），所以它是"第一个撞上"的调用；每次开界面加每 10 秒一次的重复应用
+也确实增加了这段状态的翻动次数。**根因不在本 mod 能修的范围**（Ixeris 的线程模型 × GLFW 的
+非线程安全 Wayland 后端）；要给上游的话，方向是 `github.com/decce6/Ixeris/issues`。
+
+**处置（v1.4.0）**：
+
+- `fix_cursor_theme` 默认改为 `false`＝默认光标（不再调用任何 GLFW 游标函数）。
+- 新增设置界面（Mods 列表 → 本 mod → Config）：一个开关，鼠标悬停时说明「换成桌面主题光标有概率
+  与其他 mod 不兼容」；改动即时生效并写回 toml。
+- 滚轮修复与此无关，任何情况下都不受影响。
+

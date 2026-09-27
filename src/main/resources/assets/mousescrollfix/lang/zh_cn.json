@@ -1,4 +1,10 @@
 {
   "mousescrollfix.backend_hint.title": "Mouse Scroll Fix",
-  "mousescrollfix.backend_hint.message": "X11 / XWayland 下：滚轮被系统调快的已修复；被调慢的无法还原。"
+  "mousescrollfix.backend_hint.message": "X11 / XWayland 下：滚轮被系统调快的已修复；被调慢的无法还原。",
+  "mousescrollfix.config.title": "Mouse Scroll Fix 设置",
+  "mousescrollfix.config.cursor": "鼠标指针：%s",
+  "mousescrollfix.config.cursor.default": "默认光标",
+  "mousescrollfix.config.cursor.theme": "桌面主题光标",
+  "mousescrollfix.config.cursor.hint": "点击切换。两种光标只在原生 Wayland 下有区别；X11 / XWayland 下系统本来就给桌面主题。",
+  "mousescrollfix.config.cursor.tooltip": "切换成桌面主题光标后，可能与其它 mod 出现兼容性问题。"
 }

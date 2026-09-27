@@ -4,9 +4,11 @@
 
 让鼠标滚轮「转一格 = 切一格」，不再受 KDE 的「滚动速度」设置影响 —— 原生 Wayland 与
 X11 / XWayland 两条路都管（X11 下只能修「被调快」的一半，原因见第一节）。
-换成原生 Wayland 后带来的鼠标指针问题（箭头变成系统默认样式）也由 mod 一并修好。
+换成原生 Wayland 后带来的鼠标指针问题（箭头变成系统默认样式）也可以由 mod 处理，但
+**默认关闭**（v1.4.0 起）：它需要调用 `glfwSetCursor`，在 Ixeris 这类把 GLFW 事件轮询
+搬到另一个线程的整合包里有概率崩游戏 —— 开关在「Mods 列表 → 本 mod → Config」。
 
-- 产物：`build/libs/mousescrollfix-1.3.0.jar`
+- 产物：`build/libs/mousescrollfix-1.4.0.jar`
 - 纯客户端 mod，不会影响联机（`clientSideOnly=true`）
 - 已在干净环境（无其他 mod 的开发客户端）实测通过，未装进任何整合包
 
@@ -216,9 +218,9 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 | `debug_log` | `false` | 把每个滚轮事件写进 `logs/mousescrollfix-debug.log` |
 | `self_test_on_join` | `false` | 进世界后自动跑一次自检（含 X11 的合并自检） |
 | `backend_hint` | `true` | **v1.2.0 新增**：如果游戏没跑在原生 Wayland 下（X11 / XWayland），进主菜单时弹一条提示，说明那里「滚轮被调快的已修、被调慢的修不了」。只在**确实检测到** X11/XWayland 时才弹（Windows/macOS 检测不到后端，永远不弹） |
-| `fix_cursor_theme` | `true` | 自动把鼠标指针换成桌面的游标主题（仅原生 Wayland 生效）。设 `false` 恢复 GLFW 的默认箭头（会变成 Adwaita 那套通用箭头）；配置改动若 10 秒内没生效，说明 Forge 没自动重载配置，重启游戏即可 |
-| `cursor_theme` | 空 | 留空＝自动读桌面设置。只有当 mod 认不出你的桌面环境时，才需要手填主题名（`/usr/share/icons` 下的目录名） |
-| `cursor_size` | `0` | 游标尺寸（逻辑像素），`0`＝用桌面配置的尺寸（读不到时 24） |
+| `fix_cursor_theme` | `false` | **v1.4.0 起默认关闭**：`true` ＝ 把鼠标指针换成桌面的游标主题（仅原生 Wayland 生效）。它会调用 `glfwSetCursor`，在原生 Wayland 且有 mod 把 GLFW 事件轮询搬到别的线程时（Ixeris）有概率崩游戏，机制见 `FINDINGS.md` 第 9 节。游戏内可在「Mods 列表 → 本 mod → Config」拨这个开关，改动即时生效并写回本文件；设 `false` 恢复 GLFW 的默认箭头（Adwaita 那套通用箭头） |
+| `cursor_theme` | 空 | 仅当 `fix_cursor_theme = true` 时有用。留空＝自动读桌面设置；只有当 mod 认不出你的桌面环境时，才需要手填主题名（`/usr/share/icons` 下的目录名） |
+| `cursor_size` | `0` | 仅当 `fix_cursor_theme = true` 时有用。游标尺寸（逻辑像素），`0`＝用桌面配置的尺寸（读不到时 24） |
 
 游戏内命令：`/mousescrollfix test`（跑自检）、`/mousescrollfix status`（看当前状态：后端、这里
 适用哪套修复、X11 检测结果）、`/mousescrollfix cursor`（重新应用并打印指针用的是哪个主题、
@@ -235,7 +237,8 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 | `X11Scaling` | **v1.3.0 新增**：读 KDE 的 `kcminputrc`，看是否存在 `ScrollFactor > 1` 的设备 —— 有这个才说明系统真的在复制滚轮事件，`x11_fix = "auto"` 据此决定是否启用合并 |
 | `GlxWaylandCompatMixin` | 让 MC 1.20.1 能在 Wayland 上启动：原版会把 GLFW 的 `0x1000C`（"Wayland 不提供窗口位置"）当成致命错误直接崩溃 |
 | `WindowWaylandCompatMixin` | 同上，处理启动后的另一条：`0x1000C`（"Wayland 不支持设置窗口图标"）会让原版弹「请更新显卡驱动」对话框卡死。两个 Mixin 都只放过 `0x1000C` 这一个错误码并记日志，其他 GLFW 错误照常按原版处理 |
-| `CursorThemeFix` | **v1.1.0 新增**：Wayland 下窗口上的指针由 GLFW 决定，而 GLFW 只认 `XCURSOR_THEME` 环境变量（桌面环境不导出它），于是显示通用箭头。这个类自己去读桌面配置（KDE `kcminputrc`／GTK `settings.ini`／环境变量），在开界面时把主题里的箭头交给 GLFW。GLFW 在抓取/释放鼠标时会忘记窗口游标，所以每 10 秒和每次开界面都会重新应用一次 |
+| `CursorThemeFix` | **v1.1.0 新增，v1.4.0 起默认关闭**：Wayland 下窗口上的指针由 GLFW 决定，而 GLFW 只认 `XCURSOR_THEME` 环境变量（桌面环境不导出它），于是显示通用箭头。这个类自己去读桌面配置（KDE `kcminputrc`／GTK `settings.ini`／环境变量），在开界面时把主题里的箭头交给 GLFW。GLFW 在抓取/释放鼠标时会忘记窗口游标，所以每 10 秒和每次开界面都会重新应用一次 |
+| `ScrollFixConfigScreen` | **v1.4.0 新增**：Mods 列表里的设置界面（Forge 1.20.1 自己没有配置界面，不注册的话设置只存在于 toml 文件里）。目前只有一个指针开关，鼠标悬停时说明桌面主题光标的风险；拨动后立即改配置、存盘，并重建或释放游标，不用重启 |
 | `XCursorFile` | **v1.1.0 新增**：解析 Xcursor 文件格式（主题里 `.cursor`/`cursors/*` 的格式），挑出与请求尺寸最接近的那一档箭头，把预乘 ARGB 转成 GLFW 要的直通 RGBA |
 | `EnvInfo` | **v1.2.0 新增**：判断游戏实际用的是原生 Wayland 还是 X11/XWayland（读 `/proc/self/maps`，看进程里绑的是 `libwayland-client` 还是 `/libX11.so`），两种都没读到就返回"未知"、什么都不做 |
 | `BackendHint` | **v1.2.0 新增**：判定为 X11/XWayland 时，在主菜单弹一次提示（每次启动最多一次），说明那边「被调快的已修、被调慢的修不了」。Windows/macOS 上后端检测不到，按构造不会误报。文案走 lang 文件，`en_us` 与 `zh_cn` 各一份 |
@@ -252,7 +255,7 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
    - Wayland 不提供窗口位置，游戏可能记不住窗口坐标
    - 分数缩放（你这里是 1.25x）下的画面、光标行为可能和以前不同
 
-3. **鼠标指针会自动换成你桌面的主题（v1.1.0 起 mod 自己搞定，不用你配任何东西）。**
+3. **鼠标指针可以换成你桌面的主题 —— 但 v1.4.0 起默认关闭。**
    背景是这样：Wayland 下窗口上的箭头完全由 GLFW 给出（Minecraft 本体从不调用 `glfwSetCursor`，
    整个客户端里只有 `glfwSetCursorPos` 和几个回调），而 GLFW 的 Wayland 后端既没有
    compositor 侧的游标形状协议（在 `/usr/lib/libglfw.so.3` 里搜不到任何 `wp_cursor_shape`），
@@ -271,6 +274,12 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
    Breeze 平均色差 33.6、Adwaita 130.2（主菜单）；进世界后按 ESC（鼠标抓取→释放的完整周期）
    复测 38.4 / 142.4；把功能关掉则反过来变成 Adwaita 45.2 / Breeze 113.9 —— 即修复前你看到的就是 Adwaita。
    `/mousescrollfix cursor` 可以随时查看它当前用的是哪个主题、哪个文件。
+
+   **为什么默认关闭**：这一项是 mod 里唯一会调用 `glfwSetCursor` 的地方，而 2026-09-27 在用户的
+   DAdv 整合包里实测到一次崩溃 —— 崩溃点在 GLFW 清理「鼠标锁定」对象时撞上一个已经释放的
+   Wayland 对象指针（野指针）。那是 Ixeris（把 GLFW 事件轮询搬到另一个线程）和系统 GLFW 3.5.1
+   的 Wayland 后端之间的线程竞态，根因不在本 mod；但本 mod 的调用会去碰这份状态，所以选择默认不动它。
+   完整证据链见 `FINDINGS.md` 第 9 节。要桌面主题光标，就在设置界面里打开，风险自担。
 
 4. **X11 / XWayland 下只能修一半**：倍数 > 1（事件被复制）的那半 v1.3.0 起能修好，
    倍数 < 1（事件被吞掉）的那半修不了 —— 那些格在到达游戏之前就没了，任何客户端 mod 都救不回。

@@ -57,7 +57,7 @@ public final class ScrollFixConfig {
     public static volatile boolean debugLog = false;
     public static volatile boolean selfTestOnJoin = false;
     public static volatile boolean backendHint = true;
-    public static volatile boolean fixCursorTheme = true;
+    public static volatile boolean fixCursorTheme = false;
     public static volatile String cursorTheme = "";
     public static volatile int cursorSize = 0;
 
@@ -137,20 +137,27 @@ public final class ScrollFixConfig {
                 "Minecraft itself never sets a cursor, so this section lets the mod do it: the desktop's own",
                 "cursor theme is read from KDE's kcminputrc / GTK's settings.ini, the matching arrow image is",
                 "loaded from that theme's Xcursor files and handed to GLFW directly. No launcher settings,",
-                "no environment variables; whatever theme the desktop uses is what you get."
+                "no environment variables; whatever theme the desktop uses is what you get.",
+                "OFF by default: this is the only thing in the game that calls glfwSetCursor, and on a",
+                "Wayland session driven by mods that move GLFW's event polling onto another thread (Ixeris)",
+                "that call has been observed to crash the game - see FINDINGS.md, section 9.",
+                "Everything else this mod does (the scroll fix) works with the default pointer."
         );
         FIX_CURSOR_THEME = b.comment(
-                        "Take the mouse pointer from the desktop's cursor theme on Wayland.",
+                        "false (default) = leave GLFW's own pointer alone.",
+                        "true = take the mouse pointer from the desktop's cursor theme on Wayland.",
                         "Has no effect on X11 or on non-Linux systems, where the desktop theme already applies.")
-                .define("fix_cursor_theme", true);
+                .define("fix_cursor_theme", false);
 
         CURSOR_THEME = b.comment(
+                        "Only used when fix_cursor_theme = true.",
                         "Leave empty to use whatever cursor theme the desktop is configured with.",
                         "Set a theme name (a directory under /usr/share/icons) only to override it, e.g. when",
                         "the desktop is not one this mod knows how to read the setting from.")
                 .define("cursor_theme", "");
 
         CURSOR_SIZE = b.comment(
+                        "Only used when fix_cursor_theme = true.",
                         "Cursor size in logical pixels; 0 = take the desktop's configured size (24 if unset).",
                         "This is the same number the desktop's own cursor settings use.")
                 .defineInRange("cursor_size", 0, 0, 256);
@@ -159,6 +166,18 @@ public final class ScrollFixConfig {
     }
 
     private ScrollFixConfig() {
+    }
+
+    /**
+     * Changes the pointer switch from the settings screen: writes the value, mirrors it and saves the
+     * file, then drops the cursor so the change shows up without restarting the game.
+     */
+    public static void setFixCursorTheme(boolean value) {
+        FIX_CURSOR_THEME.set(value);
+        fixCursorTheme = value;
+        SPEC.save();
+        CursorThemeFix.reset();
+        MouseScrollFix.LOGGER.info("[mousescrollfix] fix_cursor_theme set to {}", value);
     }
 
     public static void onConfigEvent(ModConfigEvent event) {

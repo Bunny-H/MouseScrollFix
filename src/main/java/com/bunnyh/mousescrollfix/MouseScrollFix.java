@@ -17,6 +17,8 @@
 
 package com.bunnyh.mousescrollfix;
 
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
@@ -35,5 +37,8 @@ public class MouseScrollFix {
     public MouseScrollFix() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ScrollFixConfig.SPEC);
         FMLJavaModLoadingContext.get().getModEventBus().addListener(ScrollFixConfig::onConfigEvent);
+        // Without a registered screen the "Config" button in the Mods list does not exist at all
+        // in 1.20.1, and the pointer switch would only be reachable by editing the file.
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> ScrollFixConfigScreen::register);
     }
 }
