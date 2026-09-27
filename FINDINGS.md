@@ -1,6 +1,6 @@
 # 实测记录：Minecraft 1.20.1 滚轮切换物品问题的真实机制
 
-全部数据来自本机实测（CachyOS + KDE Plasma 6.7.5 / Wayland / KWin 6.7.5），
+全部数据来自实测（CachyOS + KDE Plasma 6.7.5 / Wayland / KWin 6.7.5），
 测量手段：`/dev/uinput` 造一个虚拟鼠标，让 KWin 像处理真实鼠标一样处理它，
 再用 GLFW 写的最小探针程序记录游戏实际收到的滚轮事件。
 
@@ -13,7 +13,7 @@ GLFW 3.4.0 Wayland X11 GLX Null EGL OSMesa monotonic shared | window backend: x1
 ```
 
 - MC 1.20.1 用的 LWJGL 3.3.1，其 `lwjgl-glfw-3.3.1-natives-linux.jar` 里打包的
-  `libglfw.so` **是 GLFW 3.4.0，本身带 Wayland 后端**（sha1 `e4e724fc…`，与 HMCL 解出来的一致）。
+  `libglfw.so` **是 GLFW 3.4.0，本身带 Wayland 后端**（sha1 `e4e724fc…`）。
 - 但 **LWJGL 3.3.1 打包的这份 GLFW，在 Wayland 会话里仍然选 X11**（实测）。
 - 对照实验（同一份进程环境，只换加载的库，2026-09-19 复测）：
 
@@ -38,9 +38,9 @@ GLFW 3.4.0 Wayland X11 GLX Null EGL OSMesa monotonic shared | window backend: x1
 | 设备（对应 kcminputrc 里的 ScrollFactor） | 发出的格数 | GLFW 收到的事件数 | 事件值 |
 |---|---|---|---|
 | 通用设备（默认 ScrollFactor = 1.0） | 12 | **12** | 全部 `y=+1.000000` |
-| `ITE ... Device(8176) Keyboard`（0.75） | 12 | **9** | 全部 `y=+1.000000` |
-| `Rapoo Rapoo Gaming Device`（1.5） | 12 | **18** | 全部 `y=+1.000000` |
-| `RDMCTMZT Wireless 2.4G Dongle Mouse`（0.1） | 12 | **1** | `y=+1.000000` |
+| 键盘（0.75） | 12 | **9** | 全部 `y=+1.000000` |
+| 鼠标（1.5） | 12 | **18** | 全部 `y=+1.000000` |
+| 无线鼠标（0.1） | 12 | **1** | `y=+1.000000` |
 
 **关键结论：X11 路径下，事件值永远是 ±1.0，没有小数。**
 KWin 的「滚动速度」不能改事件的大小，只能改**事件的个数**。
@@ -53,7 +53,7 @@ KWin 的「滚动速度」不能改事件的大小，只能改**事件的个数*
 ```
 
 也就是：**连发 3 格 → 全部生效；第 4 格被整格吞掉。**
-这正是用户描述的「滚一下不切、滚两下切一格、再滚又跳过一格」。
+这正是问题现象：「滚一下不切、滚两下切一格、再滚又跳过一格」。
 
 ## 3. 原版 Minecraft 怎么处理这些事件
 
@@ -114,7 +114,7 @@ mod 用两个 Mixin 只放过这一个错误码（`GlxWaylandCompatMixin`、`Win
 
 ### 5.2 Wayland 下的滚轮实测
 
-同一个虚拟鼠标、同一个 Rapoo 标识（ScrollFactor = 1.5），转 12 格：
+同一个虚拟鼠标、冒充同一个 ScrollFactor = 1.5 的设备，转 12 格：
 
 ```
 raw=+1.5000 norm=+1.0000 gapMs=-1 ctx=world  slotBefore=7
@@ -154,13 +154,14 @@ RESULT: PASS - every simulated notch moved exactly 1 slot
 | `kwin_helper.js` | KWin 脚本：把 Minecraft 窗口置顶并打印其几何位置（Wayland 下应用自己拿不到窗口坐标） |
 
 ```bash
-# 虚拟鼠标：12 格，冒充 ITE 键盘设备（ScrollFactor 0.75）→ 预期只收到 9 个事件
+# 虚拟鼠标：12 格，冒充一个 ScrollFactor = 0.75 的设备 → 预期只收到 9 个事件
+# --name 要写你机器上 kcminputrc 里真实存在的设备名，KWin 才会套用它的倍率
 python3 tools/wheel.py 12 --delay 200 \
-    --name "ITE Tech. Inc. ITE Device(8176) Keyboard" --vendor 0x048D --product 0xC992
+    --name "<你机器上的设备名>" --vendor <厂商ID> --product <产品ID>
 
-# 冒充 Rapoo（1.5）→ 预期 18 个事件（X11）或 12 个 raw=1.5 的事件（Wayland）
+# 冒充一个 ScrollFactor = 1.5 的设备 → 预期 18 个事件（X11）或 12 个 raw=1.5 的事件（Wayland）
 python3 tools/wheel.py 12 --delay 200 \
-    --name "Rapoo Rapoo Gaming Device" --vendor 0x24AE --product 0x1412
+    --name "<你机器上的设备名>" --vendor <厂商ID> --product <产品ID>
 ```
 
 游戏内的验证不需要这些工具：把 `self_test_on_join = true` 打开，进世界 4 秒后自检
@@ -174,29 +175,29 @@ python3 tools/wheel.py 12 --delay 200 \
 |---|---|
 | Minecraft 本体从不设置游标 | 扫整个客户端 jar，与游标相关的只有 `glfwSetCursorPos` 和两个回调，`glfwSetCursor`/`glfwCreateStandardCursor` 一次都没有 |
 | Wayland 下箭头由 GLFW 决定，且它只认环境变量 | `/usr/lib/libglfw.so.3` 里有 `XCURSOR_THEME`/`XCURSOR_SIZE` 字符串，没有任何 `wp_cursor_shape` 协议 |
-| 这两个变量在本机处处为空 | shell、`systemctl --user show-environment`、游戏进程 `/proc/<pid>/environ` 三处都没有；KDE 只在 X11 侧写 X 资源库（`xrdb -query` → `Xcursor.theme: breeze_cursors`） |
+| 这两个变量在测试机上处处为空 | shell、`systemctl --user show-environment`、游戏进程 `/proc/<pid>/environ` 三处都没有；KDE 只在 X11 侧写 X 资源库（`xrdb -query` → `Xcursor.theme: breeze_cursors`） |
 | 因此 GLFW 退回名为 `default` 的主题 | libwayland-cursor 上游源码 `if (!name) name = "default";`；而 `/usr/share/icons/default/index.theme` 只有 `Inherits=Adwaita` |
-| 桌面主题的真实来源 | `~/.config/kdedefaults/kcminputrc` → `[Mouse] cursorTheme=breeze_cursors`（用户自己的 `kcminputrc` 里没有这个键，KDE 的 `kreadconfig6` 就是从 kdedefaults 回退出来的） |
+| 桌面主题的真实来源 | `~/.config/kdedefaults/kcminputrc` → `[Mouse] cursorTheme=breeze_cursors`（`~/.config/kcminputrc` 里没有这个键，KDE 的 `kreadconfig6` 就是从 kdedefaults 回退出来的） |
 | 环境变量改不动 | Forge 的早期窗口（`fmlearlywindow`，jar 里有 `glfwInit`×3）在 mod 加载之前就初始化了 GLFW，而 GLFW 只在那一刻读一次主题 |
 
-验证方式：`spectacle -b -p` 截带指针的全屏图（游标热点坐标 = 逻辑坐标 × 1.25），
+验证方式：`spectacle -b -p` 截带指针的全屏图（游标热点坐标 = 逻辑坐标 × 该屏幕的缩放系数），
 用 Python 把主题的 `cursors/left_ptr` 解出来当模板，在 ±14px 内滑窗做逐像素比色：
 
 | 场景 | Breeze 色差 | Adwaita 色差 | 判定 |
 |---|---|---|---|
-| mod 游标功能**关闭** | 113.9 | **45.2** | Adwaita（= 修复前用户看到的） |
+| mod 游标功能**关闭** | 113.9 | **45.2** | Adwaita（= 修复前的观感） |
 | mod 游标功能开启，主菜单 | **33.6** | 130.2 | Breeze |
 | mod 游标功能开启，进世界后按 ESC（抓取→释放鼠标） | **38.4** | 142.4 | Breeze |
 | 最终版本（重构后） | **33.9** | 130.6 | Breeze |
 
-三次开启状态下的最佳匹配缩放都是 1.25，与外接屏的分数缩放一致，说明拿到的就是主题里那一档图。
+三次开启状态下的最佳匹配缩放都是 1.25，与测试屏幕的分数缩放一致，说明拿到的就是主题里那一档图。
 
 > **v1.4.0 起这一节的功能默认关闭**（原因见第 9 节）：默认用 GLFW 自己的光标，要桌面主题光标
 > 得在 Mods 列表里打开本 mod 的设置界面拨开关。滚轮修复不受影响。
 
 ## 8. X11 / XWayland 路径（v1.3.0）：合并「被复制的同一个格」
 
-全部为 2026-09-24 本机实测（CachyOS / KDE Plasma 6.7.5 / KWin 6.7.5 / XWayland，
+全部为 2026-09-24 实测（环境：CachyOS / KDE Plasma 6.7.5 / KWin 6.7.5 / XWayland，
 游戏内是 LWJGL 3.3.1 自带的 GLFW 3.4.0）。
 
 ### 8.1 复制事件长什么样（探针 + 虚拟鼠标，每次「转 12 格」）
@@ -204,23 +205,23 @@ python3 tools/wheel.py 12 --delay 200 \
 | 冒充的设备（ScrollFactor） | 转格节奏 | 收到事件 | 相邻事件间隔 |
 |---|---|---|---|
 | 无（默认 1.0） | 200 ms | 12 | 200 ms |
-| Rapoo（1.5） | 200 ms | **18** | 200 ms 与 **780–947 µs** 交替 |
-| Rapoo（1.5） | 20 ms（50 格/秒） | **18** | 20 ms 与 **189–471 µs** 交替 |
-| Rapoo（1.5） | 5 ms（200 格/秒） | **18** | 5 ms 与 **148–531 µs** 交替 |
-| ITE 键盘（0.75） | 200 ms | **9** | `200 200 400` 循环 |
+| 鼠标（1.5） | 200 ms | **18** | 200 ms 与 **780–947 µs** 交替 |
+| 鼠标（1.5） | 20 ms（50 格/秒） | **18** | 20 ms 与 **189–471 µs** 交替 |
+| 鼠标（1.5） | 5 ms（200 格/秒） | **18** | 5 ms 与 **148–531 µs** 交替 |
+| 键盘（0.75） | 200 ms | **9** | `200 200 400` 循环 |
 
 所有事件的值都是 `+1.0`。**复制出来的那个事件紧跟原事件不到 1 毫秒**，而真实格与格之间
 即使狠转也有几毫秒（5 ms 那行已经是 200 格/秒，人手做不到）。1.5 倍时 12 格产生 18 个事件
 （第 2、4、6…格各多一个），0.75 倍时 12 格只剩 9 个（第 4、8、12 格被整格吞掉）。
 
-### 8.2 游戏内实测（开发客户端跑 XWayland，虚拟鼠标冒充 Rapoo 1.5）
+### 8.2 游戏内实测（开发客户端跑 XWayland，虚拟鼠标冒充 1.5 倍设备）
 
 | 配置 | 转 12 格 | 收到事件 | 判为复制 | 物品栏实际切格 |
 |---|---|---|---|---|
 | `x11_fix = "off"`（等于没有这个修复） | 12 | 18 | 0 | **18** ← 跳格 |
 | `x11_fix = "auto"`（默认） | 12 | 18 | 6 | **12** ← 一格一格 |
 | 默认设备（倍率 1.0） | 12 | 12 | 0 | 12（不受影响） |
-| Rapoo，每 20 ms 一格（50 格/秒） | 12 | 18 | 6 | **12**（快滚没被吃掉） |
+| 1.5 倍设备，每 20 ms 一格（50 格/秒） | 12 | 18 | 6 | **12**（快滚没被吃掉） |
 
 默认设置那行的物品栏路径：`8,7,6,5,4,3,2,1,0,8,7,6,5` —— 12 格正好 12 步（含 9 格回绕）。
 被合并的复制事件实测间隔 138–197 µs，判定窗口是 2 ms，差 10 倍以上。
@@ -232,7 +233,7 @@ python3 tools/wheel.py 12 --delay 200 \
 游戏内自检（`self_test_on_join = true`）也覆盖这条路径：
 
 ```
-duplicate merging (X11 / XWayland): true | this desktop duplicates wheel events (ScrollFactor 1.50 in .../kcminputrc (Libinput][9390][5138][Rapoo Rapoo Gaming Device))
+duplicate merging (X11 / XWayland): true | this desktop duplicates wheel events (ScrollFactor 1.50 in .../kcminputrc (Libinput][9390][5138][<设备名>))
 two events in the same instant : -1 slot(s)  (want -1)
 two events 40 ms apart         : -2 slot(s)  (want -2)
 RESULT: PASS - duplicates merged, real notches left alone
@@ -250,7 +251,7 @@ RESULT: PASS - duplicates merged, real notches left alone
 
 ### 8.4 为什么不能相信 `user.home`（v1.3.0 实测踩到的坑）
 
-用户在自己的 HMCL 纯净实例（`versions/1.20.1-Forge`）里装 1.3.0 后**完全没有效果**，
+在一个 HMCL 纯净实例（`versions/1.20.1-Forge`）里装 1.3.0 后**完全没有效果**，
 日志里是：
 
 ```
@@ -259,16 +260,16 @@ scroll fix in this session: nothing (no scaler detected on this backend, or merg
 X11 detection: no KDE wheel ScrollFactor configured, nothing to merge
 ```
 
-同一个用户、同一份 `~/.config/kcminputrc`（603 字节、纯 ASCII、`ScrollFactor=1.5` 就在里面），
+同一份 `~/.config/kcminputrc`（603 字节、纯 ASCII、`ScrollFactor=1.5` 就在里面），
 开发客户端里能读到、HMCL 里读不到。原因在 HMCL 记录的启动命令里：
 
 ```
-"-Duser.home=/home/bunnyh/.config/hmcl"
+"-Duser.home=/home/<用户名>/.config/hmcl"
 ```
 
 **HMCL 把游戏的 `user.home` 指向了自己的数据目录**，于是按 `user.home/.config/kcminputrc`
 去找就变成了 `~/.config/hmcl/.config/kcminputrc` —— 不存在。而 `HOME` 环境变量在游戏的进程里
-仍然是 `/home/bunnyh`（HMCL 的子进程照常继承）。v1.1.0 的游标主题功能用的是同一套路径逻辑，
+仍然是 `/home/<用户名>`（HMCL 的子进程照常继承）。v1.1.0 的游标主题功能用的是同一套路径逻辑，
 所以在 HMCL 实例里（原生 Wayland 下）它其实也一直静默跳过。
 
 修法（`DesktopFiles`）：`HOME` 优先，`user.home` 只作兜底；并且把**所有**可能的位置都查一遍
@@ -286,13 +287,12 @@ X11 detection: no KDE wheel ScrollFactor configured, nothing to merge
 | 故意给错 `user.home`、无 `HOME` | 正确报告「找不到」并列出查过的文件 ✓ |
 
 游戏内验证：以 HMCL 同样条件启动的客户端里，12 格 → 12 格（合并 6 个复制事件），
-用户随后在自己的 HMCL 实例里实测：「效果非常好」。
+随后在实际的 HMCL 实例里实测确认有效。
 
 ## 9. 整合包内崩溃调查（v1.4.0）：`glfwSetCursor` 撞上野指针
 
-**现象**：2026-09-27，用户在自己的 DAdv 整合包（HMCL 启动，Forge 47.4.21，日志里 246 个 mod）里
-玩了一小时后**原生崩溃**（`hs_err_pid103604.log` + 3.8 GB core dump；当时复制进 `err/` 供排查，
-查完已删，日志没有随仓库分发）。崩溃帧：
+**现象**：2026-09-27，在一次大型整合包实测中（HMCL 启动，Forge 47.4.21，日志里 246 个 mod）
+玩了一小时后**原生崩溃**（`hs_err_pid103604.log` + 3.8 GB core dump；日志与 core dump 未随仓库分发）。崩溃帧：
 
 ```
 C  [libwayland-client.so.0+0x7f1a]  wl_proxy_marshal_flags+0xca

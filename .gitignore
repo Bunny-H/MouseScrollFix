@@ -29,3 +29,5 @@ forge*changelog.txt
 .zcodeignore
 .directory
 __pycache__/
+# 内部工作约定文件：只在本机起作用，不进仓库
+AGENTS.md
