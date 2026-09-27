@@ -291,7 +291,8 @@ X11 detection: no KDE wheel ScrollFactor configured, nothing to merge
 ## 9. 整合包内崩溃调查（v1.4.0）：`glfwSetCursor` 撞上野指针
 
 **现象**：2026-09-27，用户在自己的 DAdv 整合包（HMCL 启动，Forge 47.4.21，日志里 246 个 mod）里
-玩了一小时后**原生崩溃**（`hs_err_pid103604.log` + 3.8 GB core dump，都在 `err/`）。崩溃帧：
+玩了一小时后**原生崩溃**（`hs_err_pid103604.log` + 3.8 GB core dump；当时复制进 `err/` 供排查，
+查完已删，日志没有随仓库分发）。崩溃帧：
 
 ```
 C  [libwayland-client.so.0+0x7f1a]  wl_proxy_marshal_flags+0xca
